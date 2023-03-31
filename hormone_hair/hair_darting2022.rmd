@@ -1,22 +1,98 @@
 ---
-title: "R Notebook"
+title: "Data Exploration of Hormone Samples"
 output: html_notebook
+author: Maria Granell Ruiz
+date: 2023/03/31
 ---
 
-The [R plugin](https://www.jetbrains.com/help/pycharm/r-plugin-support.html) for IntelliJ-based IDEs provides
-handy capabilities to work with the [R Markdown](https://www.jetbrains.com/help/pycharm/r-markdown.html) files.
-To [add](https://www.jetbrains.com/help/pycharm/r-markdown.html#add-code-chunk) a new R chunk,
-position the caret at any line or the code chunk, then click "+".
+This is a data exploration of hormone samples analyzed at the NPAC using HPLC technology by Beni and me. We analyzed a total of `n` samples, all of which were collected during the same time period from Vervet monkeys in South Africa. The samples were extracted between February 24 and 28, 2023, at the University of Neuchatel.
 
-The code chunk appears:
-```{r}
+```{r, echo = F, include = FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+
+data <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_hair/data/merged_hormone_date_2022.csv") # nolint
+
+# data organization --------------
+data$hormone_family <- as.factor(data$hormone_family)
+data$concentration <- as.numeric(data$concentration)
+
 ```
 
-Type any R code in the chunk, for example:
-```{r}
-mycars <- within(mtcars, { cyl <- ordered(cyl) })
-mycars
+During the analysis, we targeted nine hormones, which belonged to the Steroids and Glucocorticoids hormone families:
+
+* *Steroids*: Estradiol, progesterone, testosterone, DHEA, androstenedione, and 11-kt.
+* *Glucocorticoids*: Cortisol, cortisone, and corticosterone.
+
+We further separated these hormones into the following groups:
+
+1. Androgens: These are a type of steroid hormone that promotes male characteristics. The androgens we analyzed were testosterone, DHEA, androstenedione, and 11-kt.
+
+2. Estrogens and progestogens: These are types of steroid hormones that promote female characteristics. We analyzed two hormones from these groups, estradiol and progesterone.
+
+3. Glucocorticoids: These are another type of steroid hormone that regulates metabolism and the immune response. We analyzed three glucocorticoids, cortisol, cortisone, and corticosterone.
+
+For this analysis some of the concentrations were below the detect limit, and corticosterone only allowed to show an absence/presence. So for now I will also exclude it for the analysis. In total then
+only the hormones Cortisone, Cortisol, DHEA.Q, Androstenedione.Q, Testosterone, Progesterone.
+
+### Biological variation, reliability of results
+
+This is an important part of the analysis. For this replicates I took different hairs until I have 10 ng/ul per sample
+```{r, echo=F}
+{hormones <- c("Cortisone", "Cortisol", "DHEA.Q", "Androstenedione.Q", "Testosterone", "Progesterone")
+color_map <- c("yes" = "red", "steroids" = "blue")
+
+plots <- lapply(hormones, function(hormone) {
+  data %>%
+    filter(Replicates != "Standard" & hormones == hormone) %>%
+    ggplot(aes(x = as.numeric(NPAC_ID), y = concentration, fill = Replicates)) +
+    geom_col() +
+    scale_fill_manual(values = color_map) +
+    coord_flip() +
+    xlab("") +
+    ylab(hormone) +
+    theme(legend.position = "none")
+})
+
+gridExtra::grid.arrange(grobs = plots, ncol = 2)}
+
 ```
 
-Now, click the **Run** button on the chunk toolbar to [execute](https://www.jetbrains.com/help/pycharm/r-markdown.html#run-r-code) the chunk code. The result should be placed under the chunk.
-Click the **Knit and Open Document** to build and preview an output.
+
+### Individuals exploration
+
+But I have to say I haven't grouped by replicate so that might be a problem
+
+This is the data of all the individuals and hormone values
+```{r, echo=F}
+data %>%
+  filter(Replicates != "Standard" & hormones != "Corticosterone") %>%
+  ggplot(.,aes(x = AnimalID, y = concentration, fill = hormones)) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  xlab("")+
+  ylab("Hormone concentration") +
+  ggtitle("Hormone Concentration by Animal ID") +
+  labs(fill = "Hormone") +
+  theme_bw()
+```
+
+And here is when you center the data. Is messy and confusing. Centered data means that has been controlled by the mean
+
+```{r, echo=F}
+data %>%
+  filter(Replicates != "Standard" & hormones != "Corticosterone") %>%
+  group_by(AnimalID, hormones) %>%
+  summarize(concen_centered = mean(concen_centered), .groups = "drop") %>%
+  ggplot(aes(x = reorder(AnimalID, -concen_centered), y = concen_centered, fill = hormones)) +
+  geom_col() +
+  coord_flip() +
+  xlab("") +
+  ylab("Hormone concentration centered") +
+  ggtitle("Centered Hormone Concentration by Animal ID") +
+  labs(fill = "Hormone") +
+  theme_bw()
+```
